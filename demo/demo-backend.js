@@ -6,7 +6,7 @@
   const D = 864e5, now = () => Date.now(), iso = t => new Date(t).toISOString();
   const uid = () => 'u' + Math.random().toString(36).slice(2, 10);
   const code6 = () => Array.from({ length: 6 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]).join('');
-  const norm = s => String(s == null ? '' : s).replace(/[\s\u0000-\u001f]/g, '').toUpperCase();
+  const norm = s => String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0-9]/g, '');
   const fail = m => { const e = new Error(m); e.message = m; throw e; };
 
   function seed() {
@@ -167,11 +167,12 @@
       req(a.p_shop, 'staff'); reqActive(a.p_shop);
       const c = norm(a.p_code); if (c.length < 4 || c.length > 40) fail('Mã không hợp lệ: ' + c);
       const name = db.members.find(m => m.shop_id === a.p_shop && m.user_id === meId()).display_name;
-      let r = db.returns.find(x => x.shop_id === a.p_shop && x.code === c);
+      let r = db.returns.find(x => x.shop_id === a.p_shop && x.code === c), by = 'code';
+      if (!r) { r = db.returns.find(x => x.shop_id === a.p_shop && x.listed && x.order_no && norm(x.order_no) === c); if (r) by = 'order_no'; }
       if (r) {
-        if (r.scanned_at) return { status: 'dup', row: r };
+        if (r.scanned_at) return { status: 'dup', row: r, matched_by: by };
         Object.assign(r, { scanned_at: iso(now()), scanned_by: meId(), scanned_by_name: name, updated_at: iso(now()) });
-        return { status: 'ok', row: r };
+        return { status: 'ok', row: r, matched_by: by };
       }
       r = { shop_id: a.p_shop, code: c, listed: false, scanned_at: iso(now()), scanned_by: meId(), scanned_by_name: name, updated_at: iso(now()) };
       db.returns.push(r); return { status: 'stray', row: r };

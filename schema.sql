@@ -227,7 +227,8 @@ end $$;
 
 create or replace function public._norm_code(p text) returns text
 language sql immutable as $$
-  select upper(regexp_replace(coalesce(p, ''), '[\s\x00-\x1F]', '', 'g'))
+  -- chỉ giữ chữ và số: bỏ dấu #, khoảng trắng, gạch ngang… để "#802834050343" khớp với mã vạch "802834050343"
+  select upper(regexp_replace(coalesce(p, ''), '[^A-Za-z0-9]', '', 'g'))
 $$;
 
 create or replace function public.scan_code(p_shop uuid, p_code text) returns jsonb
@@ -235,6 +236,7 @@ language plpgsql security definer set search_path = public as $$
 declare
   v_code text := _norm_code(p_code);
   v_name text;
+  v_by   text := 'code';
   v_row  returns%rowtype;
 begin
   perform _require(p_shop, 'staff');
@@ -243,13 +245,20 @@ begin
   select display_name into v_name from members where shop_id = p_shop and user_id = auth.uid();
 
   select * into v_row from returns where shop_id = p_shop and code = v_code for update;
+  if not found then
+    -- quét nhầm mã đơn hàng: tìm theo cột mã đơn hàng trong danh sách
+    select * into v_row from returns
+     where shop_id = p_shop and listed and order_no is not null and _norm_code(order_no) = v_code
+     order by scanned_at nulls first limit 1 for update;
+    if found then v_by := 'order_no'; end if;
+  end if;
   if found then
     if v_row.scanned_at is not null then
-      return jsonb_build_object('status', 'dup', 'row', to_jsonb(v_row));
+      return jsonb_build_object('status', 'dup', 'row', to_jsonb(v_row), 'matched_by', v_by);
     end if;
     update returns set scanned_at = now(), scanned_by = auth.uid(), scanned_by_name = v_name, updated_at = now()
-      where shop_id = p_shop and code = v_code returning * into v_row;
-    return jsonb_build_object('status', 'ok', 'row', to_jsonb(v_row));
+      where shop_id = p_shop and code = v_row.code returning * into v_row;
+    return jsonb_build_object('status', 'ok', 'row', to_jsonb(v_row), 'matched_by', v_by);
   end if;
 
   insert into returns (shop_id, code, listed, scanned_at, scanned_by, scanned_by_name)
@@ -455,6 +464,11 @@ begin
     'revenue_month', (select coalesce(sum(amount), 0) from payments where status = 'confirmed' and confirmed_at >= date_trunc('month', now()))
   );
 end $$;
+
+-- Chuẩn hoá mã cũ (chạy lại an toàn)
+update public.returns r set code = public._norm_code(r.code)
+ where r.code <> public._norm_code(r.code)
+   and not exists (select 1 from public.returns x where x.shop_id = r.shop_id and x.code = public._norm_code(r.code));
 
 -- ---------- Bảo mật dòng (RLS) -------------------------------------
 

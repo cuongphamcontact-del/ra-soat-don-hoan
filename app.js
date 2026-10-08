@@ -11,7 +11,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fold = s => String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd');
-const norm = s => String(s == null ? '' : s).replace(/[\s\u0000-\u001f\u007f]/g, '').toUpperCase();
+const norm = s => String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0-9]/g, '');
 const DAY = 864e5;
 const vnd = n => Number(n || 0).toLocaleString('vi-VN') + 'đ';
 const nf = n => Number(n || 0).toLocaleString('vi-VN');
@@ -610,9 +610,10 @@ function getDetector() {
 }
 function pickCode(results) {
   if (!results || !results.length) return '';
-  // tem vận đơn thường có nhiều mã: ưu tiên mã vạch dài nhất (mã vận đơn), rồi mã nằm giữa
-  const sorted = results.slice().sort((a, b) => (b.boundingBox ? b.boundingBox.width : 0) - (a.boundingBox ? a.boundingBox.width : 0));
-  return sorted[0].rawValue || '';
+  // tem có nhiều mã: mã vận đơn là mã nhiều ký tự nhất, mã đơn hàng ngắn hơn
+  const sorted = results.filter(r => norm(r.rawValue).length >= 4)
+    .sort((a, b) => norm(b.rawValue).length - norm(a.rawValue).length || (b.boundingBox ? b.boundingBox.width : 0) - (a.boundingBox ? a.boundingBox.width : 0));
+  return sorted.length ? sorted[0].rawValue : '';
 }
 const FRAME = { x: .05, y: .2, w: .9, h: .32 };   // khung quét, tính theo khung camera hiển thị
 let cam = null;
@@ -759,10 +760,14 @@ async function submitScan(raw, manual) {
   }
   const st = data.status, r = data.row || {};
   const info = [r.product, r.order_no && 'Đơn ' + r.order_no, r.carrier].filter(Boolean).join(' · ');
-  if (st === 'ok') S.lastRes = { kind: 'ok', title: '✓ Đã về kho', code, meta: info || 'Đơn trong danh sách hoàn', undo: true };
-  else if (st === 'dup') S.lastRes = { kind: 'dup', title: 'Đã quét trước đó', code, meta: `${r.scanned_by_name || 'Ai đó'} đã quét lúc ${fmtDT(r.scanned_at)}${info ? ' · ' + info : ''}` };
+  let info2 = '';
+  const viaOrder = data.matched_by === 'order_no' && r.code;
+  const shown = viaOrder ? r.code : code;
+  if (viaOrder) info2 = `Quét mã đơn hàng ${code} → mã vận đơn ${r.code}`;
+  if (st === 'ok') S.lastRes = { kind: 'ok', title: '✓ Đã về kho', code: shown, meta: (viaOrder ? info2 + ' · ' : '') + (info || 'Đơn trong danh sách hoàn'), undo: true };
+  else if (st === 'dup') S.lastRes = { kind: 'dup', title: 'Đã quét trước đó', code: shown, meta: `${r.scanned_by_name || 'Ai đó'} đã quét lúc ${fmtDT(r.scanned_at)}${info ? ' · ' + info : ''}` };
   else S.lastRes = { kind: 'stray', title: 'Không có trong danh sách', code, meta: 'Đã ghi vào mục Hàng lạ để kiểm tra lại.', undo: true };
-  S.recent.unshift({ code, st, t: Date.now() }); S.recent = S.recent.slice(0, 4);
+  S.recent.unshift({ code: shown, st, t: Date.now() }); S.recent = S.recent.slice(0, 4);
   if (st !== 'dup' && S.stats) { S.stats.mine_today++; const c = $('#cnt'); if (c) c.textContent = S.stats.mine_today; }
   S.returns = null;
   renderRes(true); renderRecent(); feedback(st);
