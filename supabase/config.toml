@@ -1,0 +1,2 @@
+# Cấu hình Supabase cho repo này. Supabase GitHub integration đọc thư mục supabase/migrations
+project_id = "ra-soat-don-hoan"
