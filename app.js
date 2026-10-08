@@ -51,6 +51,7 @@ function errText(e) {
   if (/Password should be at least/i.test(m)) return 'Mật khẩu cần ít nhất 6 ký tự.';
   if (/Email not confirmed/i.test(m)) return 'Email chưa xác nhận. Mở hộp thư và bấm vào link xác nhận.';
   if (/Anonymous sign-ins are disabled/i.test(m)) return 'Web chưa bật đăng nhập cho nhân viên. Chủ web cần bật "Anonymous sign-ins" trong Supabase.';
+  if (/email rate limit/i.test(m)) return 'Hệ thống gửi email xác nhận đã hết lượt trong giờ này. Chủ web cần tắt "Confirm email" trong Supabase (Authentication → Sign In / Providers → Email), hoặc đợi khoảng 1 giờ rồi thử lại.';
   if (/rate limit|too many/i.test(m)) return 'Thao tác quá nhiều lần. Đợi vài phút rồi thử lại.';
   if (/JWT|token is expired/i.test(m)) return 'Phiên đăng nhập hết hạn. Tải lại trang.';
   return m;
