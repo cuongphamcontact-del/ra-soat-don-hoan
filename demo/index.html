@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#5F3DC4">
+<title>Rà Soát Đơn Hoàn Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<style>
+.demobar{max-width:480px;margin:0 auto;background:#5F3DC4;color:#fff;padding:8px 12px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-family:"Be Vietnam Pro",system-ui,sans-serif;font-size:13px}
+.demobar b{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.06em;background:rgba(255,255,255,.18);padding:3px 7px;border-radius:5px}
+.demobar label{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+.demobar select{flex:1;min-width:0;min-height:36px;border-radius:8px;border:none;padding:0 8px;font:inherit;color:#17212B;background:#fff}
+.demobar button{min-height:36px;border-radius:8px;border:1px solid rgba(255,255,255,.5);background:transparent;color:#fff;font:inherit;font-weight:600;padding:0 10px;cursor:pointer}
+.demobar small{flex-basis:100%;opacity:.85}
+</style>
+
+</head>
+<body style="margin:0">
+<div class="demobar" role="region" aria-label="Điều khiển bản demo">
+  <b>DEMO</b>
+  <label for="demoAs">Xem với vai
+    <select id="demoAs">
+      <option value="u-cuong">Chủ shop Cường (kiêm quản trị)</option>
+      <option value="u-lan">Nhân viên kho Lan</option>
+      <option value="">Khách chưa đăng nhập</option>
+    </select>
+  </label>
+  <button type="button" id="demoReset">Làm lại</button>
+  <small>Dữ liệu mẫu, giá ví dụ, chỉ lưu trên máy bạn. Bấm "Bật camera để quét" để thử camera thật.</small>
+</div>
+<div id="app"><div class="page"><div class="center"><div class="spin"></div></div></div></div>
+<div id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+window.APP_CONFIG = {
+  SUPABASE_URL: 'https://demo.supabase.co',
+  SUPABASE_ANON_KEY: 'demo-key-demo-key-demo-key-demo-key-demo',
+  APP_NAME: 'Rà Soát Đơn Hoàn',
+  SUPPORT_ZALO: '0901 234 567',
+  PUBLIC_URL: 'https://cuongphamcontact-del.github.io/ra-soat-don-hoan/demo/',
+  BANK: { BANK_ID: 'VCB', ACCOUNT_NO: '0123456789', ACCOUNT_NAME: 'NGUYEN VAN CUONG' },
+  LIBS: {
+    qr: '../vendor/html5-qrcode.min.js',
+    xlsx: '../vendor/xlsx.full.min.js'
+  },
+  DEMO: { sampleCodes: function () { return window.DEMO_API.sampleCodes(); } }
+};
+</script>
+<script src="demo-backend.js"></script>
+<script src="../app.js"></script>
+<script>
+(function () {
+  var sel = document.getElementById('demoAs');
+  function current() { try { var d = JSON.parse(localStorage.getItem('rsdh.demo.v1')); return d && d.session; } catch (e) { return 'u-cuong'; } }
+  var c = current();
+  sel.value = (c === 'u-cuong' || c === 'u-lan') ? c : (c ? 'u-cuong' : '');
+  if (c && c !== 'u-cuong' && c !== 'u-lan') { var o = document.createElement('option'); o.value = c; o.textContent = 'Tài khoản bạn vừa tạo'; sel.appendChild(o); sel.value = c; }
+  function go(id) {
+    window.DEMO_API.as(id || null);
+    if (window.RSDH) window.RSDH.reloadSession(id ? 'scan' : '');
+  }
+  sel.addEventListener('change', function () { go(sel.value); });
+  document.getElementById('demoReset').addEventListener('click', function () {
+    window.DEMO_API.reset(); sel.value = 'u-cuong';
+    Array.prototype.slice.call(sel.options).forEach(function (o) { if (['u-cuong', 'u-lan', ''].indexOf(o.value) < 0) o.remove(); });
+    go('u-cuong');
+  });
+})();
+</script>
+
+</body>
+</html>
