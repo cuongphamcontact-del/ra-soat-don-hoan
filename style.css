@@ -80,7 +80,12 @@ main.content{flex:1;padding:14px 16px 24px;display:flex;flex-direction:column;ga
 .counter span{font-size:11px;color:var(--nightmuted)}
 .viewer{position:relative;flex:1;min-height:420px;margin:0 12px;border-radius:18px;overflow:hidden;background:radial-gradient(circle at 50% 40%,#3B4650 0%,var(--night3) 70%)}
 #reader{position:absolute;inset:0}
-#reader video{width:100%!important;height:100%!important;object-fit:cover}
+#reader{overflow:hidden}
+#reader video{position:absolute;inset:0;width:100%!important;height:100%!important;object-fit:cover}
+#reader .frame{position:absolute;border:3px solid var(--glow);border-radius:14px;box-shadow:0 0 0 2000px rgba(13,18,22,.38);transition:border-color .15s}
+#reader .frame i{position:absolute;left:8px;right:8px;top:50%;height:2px;background:var(--glow);box-shadow:0 0 12px var(--glow);animation:scanln 1.6s ease-in-out infinite alternate}
+#reader.hit .frame{border-color:#4CC384}
+@keyframes scanln{from{top:15%}to{top:85%}}
 #reader img,#reader__dashboard,#reader__header_message{display:none!important}
 .viewer .camstart{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:14px;padding:32px 24px 24px;text-align:center;color:#C9D2DA}
 .camstart .btn{min-width:220px}
