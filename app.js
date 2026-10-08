@@ -198,6 +198,7 @@ function render() {
   closeSheet();
   if (page === 'join') return viewJoin(arg);
   if (page === 'reset') return viewReset();
+  if (page === 'check') return viewCheck();
   if (!S.user) {
     if (page === 'login') return viewLogin();
     if (page === 'signup') return viewSignup();
@@ -260,6 +261,7 @@ function openMenu() {
     ${S.isAdmin ? '<a class="opt" href="#/admin">Trang quản trị</a>' : ''}
     ${!isAnon() ? '<a class="opt" href="#/new">Tạo thêm shop</a>' : ''}
     <button class="opt" id="optInstall">Cài lên màn hình chính<small>Mở nhanh như một app</small></button>
+    <a class="opt" href="#/check">Kiểm tra lỗi<small>Dùng khi quét hoặc đăng nhập không được</small></a>
     ${C.SUPPORT_ZALO ? `<button class="opt" id="optZalo">Hỗ trợ qua Zalo<small>${esc(C.SUPPORT_ZALO)}</small></button>` : ''}
     <button class="opt" id="optOut" style="color:var(--bad)">Đăng xuất</button>`);
   $$('[data-shop]', d).forEach(b => b.onclick = () => { pickShop(b.dataset.shop); closeSheet(); replaceTo('scan'); });
@@ -279,6 +281,54 @@ function installHelp() {
     <span class="muted" style="font-size:13px">Sau đó mở bằng biểu tượng trên màn hình, không cần gõ địa chỉ web.</span>
     <button class="btn block" onclick="document.getElementById('sheet').remove()">Đóng</button></div>`);
 }
+
+// ---------- kiểm tra lỗi -------------------------------------------------------
+async function viewCheck() {
+  stopCamera();
+  app.innerHTML = `<div class="page"><header class="top"><a class="iconbtn" href="#/scan" aria-label="Quay lại" style="color:inherit">${svg(ICON.back)}</a><h1 class="disp">Kiểm tra lỗi</h1></header>
+    <main class="content"><p class="muted" style="margin:0">Chụp màn hình trang này gửi người hỗ trợ.</p><div class="card" id="chk" style="padding:4px 14px"></div>
+    <button class="btn primary big" id="camTest">Thử mở camera</button><div id="camRes"></div>
+    <div class="card mono" style="font-size:11px;word-break:break-all;color:var(--muted)">${esc(navigator.userAgent)}<br>Bản web: ${esc(document.lastModified)}</div></main></div>`;
+  const rows = [];
+  const put = (ok, name, detail) => { rows.push(`<div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line2)"><b style="color:${ok === true ? 'var(--ok)' : ok === false ? 'var(--bad)' : 'var(--warn)'};width:18px;flex:none">${ok === true ? '✓' : ok === false ? '✗' : '!'}</b><div style="min-width:0"><b>${esc(name)}</b><div class="muted" style="font-size:13px;overflow-wrap:anywhere">${esc(detail || '')}</div></div></div>`); const el = $('#chk'); if (el) el.innerHTML = rows.join(''); };
+  const ua = navigator.userAgent;
+  const inApp = /Zalo|FBAN|FBAV|FB_IAB|Instagram|Line\/|Messenger|TikTok|musical_ly|GSA\/|; wv\)/i.test(ua);
+  put(!inApp, 'Trình duyệt', inApp ? 'Đang mở trong trình duyệt của một app (Zalo, Facebook, Gmail…). App này thường chặn camera. Mở bằng Safari hoặc Chrome.' : 'Trình duyệt thường');
+  put(window.isSecureContext, 'Kết nối https', window.isSecureContext ? 'Có' : 'Không. Camera chỉ chạy trên https://');
+  const hasCam = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  put(hasCam, 'Trình duyệt hỗ trợ camera', hasCam ? 'Có' : 'Không. Trình duyệt này không cho web dùng camera.');
+  try { await loadScript(LIB.qr); put(!!window.Html5Qrcode, 'Bộ đọc mã vạch', window.Html5Qrcode ? 'Đã tải' : 'Tải xong nhưng không chạy'); }
+  catch (e) { put(false, 'Bộ đọc mã vạch', errText(e)); }
+  if (!sb) { put(false, 'Cài đặt', 'config.js chưa điền khóa Supabase'); }
+  else {
+    const p = await sb.from('plans').select('id');
+    put(!p.error, 'Kết nối cơ sở dữ liệu', p.error ? (p.error.message + (p.error.code ? ' [' + p.error.code + ']' : '')) : `Có (${(p.data || []).length} gói)`);
+    put(!!S.user, 'Đăng nhập', S.user ? (S.user.email || 'Tài khoản nhân viên') + (S.isAdmin ? ' · quản trị' : '') : 'Chưa đăng nhập');
+    if (S.user) {
+      const m = await sb.from('members').select('shop_id,role').eq('user_id', S.user.id);
+      put(!m.error && (m.data || []).length > 0, 'Shop', m.error ? m.error.message : (m.data || []).length ? `${S.shop ? S.shop.name : ''} · ${ROLE[S.role] || ''} · ${active() ? 'còn hạn đến ' + fmtDate(S.shop.paid_until) : 'HẾT HẠN'}` : 'Tài khoản chưa có shop nào');
+      if (S.shop) {
+        const st = await sb.rpc('scan_stats', { p_shop: S.shop.id });
+        put(!st.error, 'Quyền quét', st.error ? st.error.message + (st.error.code ? ' [' + st.error.code + ']' : '') : `Được · hôm nay bạn quét ${st.data.mine_today} đơn`);
+      }
+    }
+  }
+  $('#camTest').onclick = async () => {
+    const out = $('#camRes');
+    if (!hasCam) { out.innerHTML = '<div class="err">Trình duyệt này không có camera cho web.</div>'; return; }
+    out.innerHTML = '<div class="note">Đang xin quyền camera…</div>';
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+      const t = s.getVideoTracks()[0]; const lbl = t ? t.label : '';
+      s.getTracks().forEach(x => x.stop());
+      out.innerHTML = `<div class="note" style="color:var(--ok)"><b>Camera mở được.</b> ${esc(lbl)}</div>`;
+    } catch (e) {
+      out.innerHTML = `<div class="err"><b>${esc(e.name || 'Lỗi')}</b>: ${esc(e.message || String(e))}<br>${/NotAllowed/i.test(e.name) ? 'Camera bị từ chối. iPhone: Cài đặt → Safari → Camera → Cho phép. Android: bấm biểu tượng ổ khóa cạnh địa chỉ web → Quyền → Camera.' : ''}</div>`;
+    }
+  };
+}
+window.addEventListener('error', e => { try { toast('Lỗi: ' + (e.message || 'không rõ')); } catch (x) {} });
+window.addEventListener('unhandledrejection', e => { try { const r = e.reason; toast('Lỗi: ' + errText(r)); } catch (x) {} });
 
 // ---------- trang chưa cài đặt -------------------------------------------
 function viewSetup() {
@@ -480,6 +530,7 @@ function viewScan() {
         <label class="btn" for="photoIn" style="min-width:220px;background:transparent;color:var(--nightink);border-color:var(--nightline)">Chụp ảnh mã vạch</label>
         <input type="file" id="photoIn" accept="image/*" capture="environment" hidden>
         <div id="photoBox"></div>
+        <a href="#/check" style="color:var(--nightmuted);font-size:13px">Không quét được? Bấm để kiểm tra lỗi</a>
       </div>
       <div class="tools"><button id="torchBtn" aria-label="Bật đèn" hidden>${svg(ICON.torch, 20)}</button></div>
       <div class="bottom"><div id="res"></div><div class="recent" id="recent" hidden></div></div>
