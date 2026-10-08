@@ -78,14 +78,26 @@ function loadScript(src) {
 }
 
 // âm báo + rung
-let ac;
-function unlockAudio() { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); } catch (e) {} }
-document.addEventListener('pointerdown', unlockAudio, { passive: true });
-function feedback(kind) {
-  const seq = { ok: [[1180, .1]], dup: [[440, .12], [440, .12]], stray: [[760, .08], [560, .08], [760, .08]], err: [[220, .35]] }[kind] || [];
+// iPhone: audioSession 'playback' để vẫn kêu khi gạt im lặng; mở khóa âm thanh bằng một lần chạm thật (touchend/click)
+let ac, audioPrimed = false;
+function unlockAudio() {
+  try { if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback'; } catch (e) {}
   try {
-    unlockAudio();
-    if (ac) { let t = ac.currentTime; for (const [f, d] of seq) { const o = ac.createOscillator(), g = ac.createGain(); o.type = 'square'; o.frequency.value = f; g.gain.setValueAtTime(.08, t); g.gain.exponentialRampToValueAtTime(.0001, t + d); o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d); t += d + .05; } }
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    if (ac.state !== 'running') ac.resume();
+    if (!audioPrimed) { const b = ac.createBuffer(1, 1, 22050), s = ac.createBufferSource(); s.buffer = b; s.connect(ac.destination); s.start(0); audioPrimed = true; }
+  } catch (e) {}
+}
+['touchend', 'click', 'pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, unlockAudio, { passive: true, capture: true }));
+function feedback(kind) {
+  const seq = { ok: [[1180, .12]], dup: [[440, .14], [440, .14]], stray: [[760, .1], [560, .1], [760, .1]], err: [[220, .4]] }[kind] || [];
+  try {
+    if (!ac) unlockAudio();
+    if (ac) {
+      if (ac.state !== 'running') ac.resume();
+      let t = ac.currentTime + .02;
+      for (const [f, d] of seq) { const o = ac.createOscillator(), g = ac.createGain(); o.type = 'square'; o.frequency.value = f; g.gain.setValueAtTime(.22, t); g.gain.exponentialRampToValueAtTime(.0001, t + d); o.connect(g).connect(ac.destination); o.start(t); o.stop(t + d); t += d + .05; }
+    }
   } catch (e) {}
   try { if (navigator.vibrate) navigator.vibrate({ ok: 60, dup: [60, 60, 60], stray: [200, 80, 200], err: 400 }[kind] || 0); } catch (e) {}
 }
@@ -288,6 +300,7 @@ async function viewCheck() {
   app.innerHTML = `<div class="page"><header class="top"><a class="iconbtn" href="#/scan" aria-label="Quay lại" style="color:inherit">${svg(ICON.back)}</a><h1 class="disp">Kiểm tra lỗi</h1></header>
     <main class="content"><p class="muted" style="margin:0">Chụp màn hình trang này gửi người hỗ trợ.</p><div class="card" id="chk" style="padding:4px 14px"></div>
     <button class="btn primary big" id="camTest">Thử mở camera</button><div id="camRes"></div>
+    <button class="btn big" id="sndTest">Thử âm thanh</button><div id="sndRes"></div>
     <div class="card mono" style="font-size:11px;word-break:break-all;color:var(--muted)">${esc(navigator.userAgent)}<br>Bản web: ${esc(document.lastModified)}</div></main></div>`;
   const rows = [];
   const put = (ok, name, detail) => { rows.push(`<div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line2)"><b style="color:${ok === true ? 'var(--ok)' : ok === false ? 'var(--bad)' : 'var(--warn)'};width:18px;flex:none">${ok === true ? '✓' : ok === false ? '✗' : '!'}</b><div style="min-width:0"><b>${esc(name)}</b><div class="muted" style="font-size:13px;overflow-wrap:anywhere">${esc(detail || '')}</div></div></div>`); const el = $('#chk'); if (el) el.innerHTML = rows.join(''); };
@@ -313,6 +326,14 @@ async function viewCheck() {
       }
     }
   }
+  $('#sndTest').onclick = () => {
+    unlockAudio(); feedback('ok'); setTimeout(() => feedback('dup'), 500);
+    const ios = /iPhone|iPad|iPod/.test(ua);
+    setTimeout(() => {
+      $('#sndRes').innerHTML = `<div class="note">Âm thanh: <b>${ac ? ac.state : 'không có'}</b>${navigator.audioSession ? ' · chế độ phát: ' + esc(navigator.audioSession.type) : ''}.
+        ${ios ? '<br>Không nghe tiếng? Tăng âm lượng. iPhone đời cũ (iOS dưới 16.4) sẽ im nếu gạt công tắc im lặng bên hông máy. iPhone không cho web rung máy.' : ''}</div>`;
+    }, 300);
+  };
   $('#camTest').onclick = async () => {
     const out = $('#camRes');
     if (!hasCam) { out.innerHTML = '<div class="err">Trình duyệt này không có camera cho web.</div>'; return; }
